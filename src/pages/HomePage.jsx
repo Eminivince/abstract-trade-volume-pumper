@@ -74,19 +74,6 @@ function HomePage() {
         </Button>
       </Box>
 
-      <div>
-        {!activeToken && activeGroup (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            <div>
-              <Typography variant="body1" paragraph>
-                Good! Now you have a wallet group. Next is to add a token to
-                trade.
-              </Typography>
-            </div>
-          </Alert>
-        )}
-      </div>
-
       {loading ? (
         <Box
           display="flex"

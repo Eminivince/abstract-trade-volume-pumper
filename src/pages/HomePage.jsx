@@ -75,7 +75,7 @@ function HomePage() {
       </Box>
 
       <div>
-        {!activeToken && (
+        {!activeToken && activeGroup (
           <Alert severity="error" sx={{ mt: 2 }}>
             <div>
               <Typography variant="body1" paragraph>

@@ -100,7 +100,7 @@ function TradePage() {
 
         // Listen for buy transaction updates
         socket.on("buyTransactionUpdate", (data) => {
-          console.log("Received buy transaction update:", data);
+
           if (data.error) {
             let errorMessage = `Error: ${data.error}`;
             if (data.error.includes("Insufficient funds")) {
@@ -115,19 +115,19 @@ function TradePage() {
 
         // Listen for sell transaction updates
         socket.on("sellTransactionUpdate", (data) => {
-          console.log("Received sell transaction update:", data);
+
           setTransactions((prev) => [...prev, { ...data, type: "sell" }]);
         });
 
         // Listen for trade cycle updates
         socket.on("tradeCycleUpdate", (data) => {
-          console.log("Received trade cycle update:", data);
+
           setResult(`Trade Cycle Update: ${data.message}`);
         });
 
         // Listen for trade process stopped
         socket.on("tradeProcessStopped", (data) => {
-          console.log("Trade process stopped:", data);
+
           setResult(`Trading stopped. ${data.message}`);
           setIsTrading(false);
           setIsLoading(false);

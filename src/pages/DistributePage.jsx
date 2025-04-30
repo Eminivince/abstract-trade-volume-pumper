@@ -75,13 +75,13 @@ function DistributePage() {
 
         // Listen for distribute transaction updates
         socket.on("distributeTransactionUpdate", (data) => {
-          console.log("Received distribute transaction update:", data);
+
           setTransactions((prev) => [...prev, data]);
         });
 
         // Listen for distribute process completion
         socket.on("distributeProcessCompleted", (data) => {
-          console.log("Received distribute process completion:", data);
+
           setResult(
             `Distribution process completed.\nSuccess: ${data.successCount}, Fail: ${data.failCount}`
           );

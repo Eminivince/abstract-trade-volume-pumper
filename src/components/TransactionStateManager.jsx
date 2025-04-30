@@ -89,7 +89,7 @@ const TransactionStateManager = ({ chatId, onTradingStatusChange }) => {
 
         // Trading Process Events
         socketInstance.on("tradingStatsUpdate", (data) => {
-          console.log("Trading Stats Update:", data);
+          console.log("Trading Stats Update:");
           setTransactionState((prevState) => ({
             ...prevState,
             successCount: data.successCount,
@@ -104,7 +104,7 @@ const TransactionStateManager = ({ chatId, onTradingStatusChange }) => {
         });
 
         socketInstance.on("tradeCycleUpdate", (data) => {
-          console.log("Trade Cycle Update:", data);
+          console.log("Trade Cycle Update:");
           setTransactionState((prevState) => ({
             ...prevState,
             type: "trading",
@@ -119,7 +119,7 @@ const TransactionStateManager = ({ chatId, onTradingStatusChange }) => {
         });
 
         socketInstance.on("buyTransactionUpdate", (data) => {
-          console.log("Buy Transaction Update:", data);
+          console.log("Buy Transaction Update:");
           setTransactions((prev) => {
             const newTransaction = {
               type: "buy",
@@ -131,7 +131,7 @@ const TransactionStateManager = ({ chatId, onTradingStatusChange }) => {
         });
 
         socketInstance.on("sellTransactionUpdate", (data) => {
-          console.log("Sell Transaction Update:", data);
+          console.log("Sell Transaction Update:");
           setTransactions((prev) => {
             const newTransaction = {
               type: "sell",
@@ -143,7 +143,7 @@ const TransactionStateManager = ({ chatId, onTradingStatusChange }) => {
         });
 
         socketInstance.on("phaseChange", (data) => {
-          console.log("Phase Change:", data);
+          console.log("Phase Change:");
           setTransactionState((prevState) => ({
             ...prevState,
             details: {
@@ -156,7 +156,7 @@ const TransactionStateManager = ({ chatId, onTradingStatusChange }) => {
         });
 
         socketInstance.on("tradeProcessStopped", (data) => {
-          console.log("Trade Process Stopped:", data);
+          console.log("Trade Process Stopped:");
           setTransactionState((prevState) => ({
             ...prevState,
             status: "stopped",

@@ -73,7 +73,7 @@ function SellPage() {
 
         // Listen for sell transaction updates
         socket.on("sellTransactionUpdate", (data) => {
-          console.log("Received sell transaction update:", data);
+
           setTransactions((prev) => [
             { ...data, timestamp: new Date() },
             ...prev,

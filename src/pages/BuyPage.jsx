@@ -88,7 +88,7 @@ function BuyPage() {
 
         // Listen for buy transaction updates
         socket.on("buyTransactionUpdate", (data) => {
-          console.log("Received buy transaction update:", data);
+          console.log("Received buy transaction update:");
           if (data.error) {
             let errorMessage = `Error: ${data.error}`;
             if (data.error.includes("Insufficient funds")) {
@@ -104,7 +104,7 @@ function BuyPage() {
 
         // Listen for buy process completion
         socket.on("buyProcessCompleted", (data) => {
-          console.log("Received buy process completion:", data);
+          console.log("Received buy process completion:");
           setResult(
             `Buy process completed.\nSuccess: ${data.successCount}, Fail: ${data.failCount}`
           );

@@ -34,7 +34,7 @@ import SellIcon from "@mui/icons-material/Sell";
 import { io } from "socket.io-client";
 
 // const SOCKET_SERVER_URL = "http://localhost:5080";
-// const SOCKET_SERVER_URL = "https://bknd-node-deploy-d242c366d3a5.herokuapp.com";
+
 const SOCKET_SERVER_URL = "https://abstract-pump-109a297e2430.herokuapp.com";
 
 // Minimal ERC20 ABI to read balance and decimals

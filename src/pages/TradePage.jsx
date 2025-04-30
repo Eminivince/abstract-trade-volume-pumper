@@ -36,7 +36,8 @@ import { useAuth } from "../context/AuthContext";
 import TransactionStateManager from "../components/TransactionStateManager";
 
 // Constants
-const SOCKET_SERVER_URL = "http://localhost:5080";
+// const SOCKET_SERVER_URL = "http://localhost:5080";
+const SOCKET_SERVER_URL = "https://abstract-pump-109a297e2430.herokuapp.com";
 
 function TradePage() {
   const [walletGroups, setWalletGroups] = useState([]);

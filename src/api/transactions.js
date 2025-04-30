@@ -85,7 +85,7 @@ export async function startBuy(chatId, buyDetails, timeRange, token) {
 export const getRecentTransactions = async (chatId, limit = 40) => {
   try {
     const response = await fetch(
-      `http://abstract-pump-109a297e2430.herokuapp.com/api/recent-transactions?chatId=${chatId}&limit=${limit}`
+      `https://abstract-pump-109a297e2430.herokuapp.com/api/recent-transactions?chatId=${chatId}&limit=${limit}`
       // `http://localhost:5080/api/recent-transactions?chatId=${chatId}&limit=${limit}`
     );
 

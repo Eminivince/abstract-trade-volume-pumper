@@ -83,7 +83,7 @@ const TransactionStateManager = ({ chatId, onTradingStatusChange }) => {
       if (!chatId) return;
 
       try {
-        socketInstance = io("http://abstract-pump-109a297e2430.herokuapp.com");
+        socketInstance = io("https://abstract-pump-109a297e2430.herokuapp.com");
         // socketInstance = io("http://localhost:5080");
         socketInstance.emit("join", chatId);
 

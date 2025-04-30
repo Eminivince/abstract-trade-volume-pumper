@@ -38,6 +38,7 @@ export async function distributeETH(chatId, amount) {
 
 export async function collectFunds(chatId) {
   const res = await axios.post(`${API_BASE}/collect`, { chatId });
+
   // console.log(res.data);
   return res.data;
 }

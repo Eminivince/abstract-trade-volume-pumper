@@ -35,8 +35,9 @@ function CollectFundsPage() {
 
     try {
       const resp = await collectFunds(user.chatId);
+      console.log("Funds collected:", resp.result.failCount);
       setResult(
-        `Funds Collected.\nSuccess: ${resp.successCount}, Fail: ${resp.failCount}, Total Collected: ${resp.totalCollected} ETH`
+        `Funds Collected.\nSuccess: ${resp.result.successCount}, Fail: ${resp.result.failCount}, Total Collected: ${resp.result.totalCollected} ETH`
       );
     } catch (err) {
       console.error("Error collecting funds:", err);

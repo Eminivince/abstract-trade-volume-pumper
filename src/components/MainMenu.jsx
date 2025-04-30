@@ -56,7 +56,7 @@ function MainMenu() {
     { title: "Manage Wallet Groups", path: "/wallet-groups" },
     { title: "View Wallet Groups", path: "/wallet-group/view" },
     { title: "Manage Tokens", path: "/tokens" },
-    { title: "Distribute AMB", path: "/distribute" },
+    { title: "Distribute ETH", path: "/distribute" },
     { title: "Collect Funds", path: "/collect" },
     // { title: "Burn Tokens", path: "/burn" },
     // { title: "Start Buy Process", path: "/buy" },

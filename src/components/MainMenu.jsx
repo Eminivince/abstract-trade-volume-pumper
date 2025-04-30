@@ -59,10 +59,11 @@ function MainMenu() {
     { title: "Distribute AMB", path: "/distribute" },
     { title: "Collect Funds", path: "/collect" },
     // { title: "Burn Tokens", path: "/burn" },
-    { title: "Start Buy Process", path: "/buy" },
+    // { title: "Start Buy Process", path: "/buy" },
     // { title: "Start Sell Process", path: "/sell" },
+    { title: "Automated Trading", path: "/trade" },
     // { title: "Get Usage Data", path: "/usage-report" },
-    { title: "Help", path: "/help" },
+    // { title: "Help", path: "/help" },
   ];
 
   return (

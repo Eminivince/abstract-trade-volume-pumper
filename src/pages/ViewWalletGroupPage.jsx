@@ -22,12 +22,15 @@ import {
   IconButton,
   Tooltip,
   Snackbar,
+  Modal,
+  CircularProgress,
 } from "@mui/material";
 import GroupIcon from "@mui/icons-material/Group";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { all } from "axios";
 import tokenABI from "../assets/TokenABI";
+import ExportPrivateKeys from "../components/ExportPrivateKeys";
 
 function ViewWalletGroupPage() {
   const { user } = useAuth(); // your logged-in user, containing chatId
@@ -44,7 +47,9 @@ function ViewWalletGroupPage() {
     open: false,
     message: "",
   });
+  const [isLoadingBalances, setIsLoadingBalances] = useState(false);
 
+  // const provider = new ethers.JsonRpcProvider("https://network.ambrosus.io");
   const provider = new ethers.JsonRpcProvider("https://api.mainnet.abs.xyz");
 
   useEffect(() => {
@@ -88,6 +93,7 @@ function ViewWalletGroupPage() {
 
   useEffect(() => {
     const fetchActiveToken = async () => {
+      setIsLoadingBalances(true);
       try {
         let data = await getActiveToken(user.chatId);
 
@@ -105,10 +111,12 @@ function ViewWalletGroupPage() {
         let allBalance = [];
         let allNativeBalance = [];
 
-        if (allWallets) {
+        if (allWallets) { 
           for (let i = 0; i <= allWallets.length; i++) {
             try {
-              const tx = await tokenContract.balanceOf(allWallets[i]);
+              const tx = await tokenContract.balanceOf(
+                allWallets[i.toString()]
+              );
               let bal = ethers.formatEther(Number(tx).toString());
               allBalance.push(bal);
 
@@ -119,7 +127,7 @@ function ViewWalletGroupPage() {
               if (allBalance.length == 20) {
                 setBalanceArray(allBalance);
                 setNativeBalanceArray(allNativeBalance);
-
+                setIsLoadingBalances(false);
                 break;
               }
             } catch (err) {
@@ -130,6 +138,7 @@ function ViewWalletGroupPage() {
       } catch (err) {
         console.error("Error fetching active token:", err);
         setError(err.response?.data?.error || err.message);
+        setIsLoadingBalances(false);
       }
     };
 
@@ -226,27 +235,6 @@ function ViewWalletGroupPage() {
                           </Tooltip>
                         </Box>
                       }
-                      secondary={
-                        <Box display="flex" alignItems="center">
-                          <Typography
-                            variant="body2"
-                            sx={{ wordBreak: "break-all" }}>
-                            <strong>Private Key:</strong>{" "}
-                            {w.privateKey || "Hidden"}
-                          </Typography>
-                          {w.privateKey && (
-                            <Tooltip title="Copy Private Key">
-                              <IconButton
-                                size="small"
-                                onClick={() =>
-                                  handleCopy(w.privateKey, "Private Key")
-                                }>
-                                <ContentCopyIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          )}
-                        </Box>
-                      }
                     />
                   </Box>
                   <Typography variant="body2" sx={{ mt: 1 }}>
@@ -266,6 +254,14 @@ function ViewWalletGroupPage() {
                 </ListItem>
               ))}
             </List>
+
+            {/* Add Export Private Keys button */}
+            <Box mt={3} display="flex" justifyContent="center">
+              <ExportPrivateKeys
+                wallets={groupData.wallets}
+                groupName={groupData.name}
+              />
+            </Box>
           </Box>
         ) : (
           <Typography variant="body1">Loading wallet group data...</Typography>
@@ -289,6 +285,28 @@ function ViewWalletGroupPage() {
           anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
         />
       </Paper>
+      <Modal
+        open={isLoadingBalances}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
+        <Paper
+          elevation={24}
+          sx={{
+            p: 4,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 2,
+            bgcolor: "background.paper",
+            borderRadius: 2,
+          }}>
+          <CircularProgress />
+          <Typography>Loading wallet balances...</Typography>
+        </Paper>
+      </Modal>
     </Container>
   );
 }

@@ -27,8 +27,10 @@ import { io } from "socket.io-client";
 
 import TransactionStateManager from "../components/TransactionStateManager";
 
-const SOCKET_SERVER_URL = "http://localhost:5080";
+// const SOCKET_SERVER_URL = "http://localhost:5080";
 // const SOCKET_SERVER_URL = "https://bknd-node-deploy-d242c366d3a5.herokuapp.com";
+const SOCKET_SERVER_URL = "https://abstract-pump-109a297e2430.herokuapp.com";
+
 
 function DistributePage() {
   const [amount, setAmount] = useState("");

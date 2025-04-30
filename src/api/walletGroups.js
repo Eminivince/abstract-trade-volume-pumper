@@ -37,6 +37,7 @@ export async function activateWalletGroup(chatId, groupId) {
 // 1) View the active wallet group (no groupId)
 export async function viewWalletGroup(chatId) {
   const res = await axios.get(`${API_BASE}/view-wallet-group?chatId=${chatId}`);
+
   return res.data; // the active group's details (or error/null)
 }
 
@@ -46,5 +47,6 @@ export async function viewWalletGroupById(chatId, groupId) {
   const res = await axios.get(
     `${API_BASE}/view-wallet-group/${groupId}?chatId=${chatId}`
   );
+
   return res.data; // the requested group's details
 }

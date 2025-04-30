@@ -1,6 +1,6 @@
 // frontend/src/pages/SellPage.js
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ethers } from "ethers";
 
 import { startSell } from "../api/transactions"; // Ensure this function accepts sellDetails and timeRange
@@ -25,12 +25,17 @@ import {
   ListItemText,
   Chip,
   InputAdornment,
+  Divider,
+  Card,
+  CardContent,
+  CardActions,
 } from "@mui/material";
 import SellIcon from "@mui/icons-material/Sell";
 import { io } from "socket.io-client";
 
-const SOCKET_SERVER_URL = "http://localhost:5080";
+// const SOCKET_SERVER_URL = "http://localhost:5080";
 // const SOCKET_SERVER_URL = "https://bknd-node-deploy-d242c366d3a5.herokuapp.com";
+const SOCKET_SERVER_URL = "https://abstract-pump-109a297e2430.herokuapp.com";
 
 // Minimal ERC20 ABI to read balance and decimals
 const ERC20_ABI = [
@@ -40,166 +45,115 @@ const ERC20_ABI = [
 
 // Create an ethers provider using your RPC URL
 const provider = new ethers.JsonRpcProvider("https://api.mainnet.abs.xyz");
+// const provider = new ethers.JsonRpcProvider("https://network.ambrosus.io");
 
 function SellPage() {
-  const [walletGroup, setWalletGroup] = useState(null);
-  const [sellAmounts, setSellAmounts] = useState({});
-  const [walletBalances, setWalletBalances] = useState({});
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [walletGroups, setWalletGroups] = useState([]);
   const [activeToken, setActiveToken] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [timeRange, setTimeRange] = useState({
     minDelayMinutes: 2,
     maxDelayMinutes: 30,
-  }); // in minutes
-  const [result, setResult] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  });
   const [transactions, setTransactions] = useState([]);
 
-  const navigate = useNavigate();
-
-  const handleTransactionResume = (result) => {
-    // Handle the resumed transaction result
-    setTransactions([]);
-    setResult(`Transaction resumed. Result: ${JSON.stringify(result)}`);
-  };
-
-  const { user, token } = useAuth();
-
-  // Initialize Socket.IO and fetch wallet group on mount
   useEffect(() => {
     let socket;
+
     const initialize = async () => {
       if (!user) return;
+
       try {
-        // Initialize Socket.IO client with authentication
-        socket = io(SOCKET_SERVER_URL, { auth: { token } });
-
-        socket.on("connect_error", (err) => {
-          console.error("Socket connection error:", err.message);
-        });
-
-        // Join the room with the user's chatId
+        // Initialize Socket.IO client
+        socket = io(SOCKET_SERVER_URL);
         socket.emit("join", user.chatId);
 
         // Listen for sell transaction updates
         socket.on("sellTransactionUpdate", (data) => {
-          setTransactions((prev) => [...prev, data]);
+          console.log("Received sell transaction update:", data);
+          setTransactions((prev) => [
+            { ...data, timestamp: new Date() },
+            ...prev,
+          ]);
         });
 
-        // Listen for sell process completion
-        socket.on("sellProcessCompleted", (data) => {
-          setResult(
-            `Sell process completed.\nSuccess: ${data.successCount}, Fail: ${data.failCount}`
-          );
-          setIsLoading(false);
-        });
-
-        // Fetch wallet group and active token
-        await fetchWalletGroup();
-        await fetchActiveToken();
+        await fetchWalletGroupsAndToken();
       } catch (err) {
         console.error("Initialization error:", err);
-        setResult("Initialization error occurred.");
+        setError("Failed to initialize. Please try again.");
       }
     };
 
     initialize();
+
     return () => {
-      if (socket) socket.disconnect();
+      if (socket) {
+        socket.disconnect();
+      }
     };
-  }, [user, token]);
+  }, [user]);
 
-  // After walletGroup and activeToken are loaded, fetch balances for each wallet.
-  useEffect(() => {
-    if (walletGroup && activeToken) {
-      fetchWalletBalances();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walletGroup, activeToken]);
-
-  // Fetch the active wallet group and initialize sellAmounts
-  const fetchWalletGroup = async () => {
-    if (!user?.chatId) return;
+  const fetchWalletGroupsAndToken = async () => {
     try {
-      const group = await getActiveWalletGroup(user.chatId);
-      setWalletGroup(group);
+      setLoading(true);
+      const [groupsResponse, tokenResponse] = await Promise.all([
+        getActiveWalletGroup(user.chatId),
+        getActiveToken(user.chatId),
+      ]);
 
-      // Initialize sellAmounts with empty strings for each wallet
-      const initialAmounts = {};
-      group.wallets.forEach((wallet) => {
-        initialAmounts[wallet.address] = "";
-      });
-      setSellAmounts(initialAmounts);
+      if (tokenResponse) {
+        setActiveToken(tokenResponse);
+        await updateWalletBalances(groupsResponse, tokenResponse);
+      } else {
+        setError("No active token set. Please set an active token first.");
+      }
     } catch (err) {
-      console.error("Error fetching wallet group:", err);
-      setResult("Error fetching wallet group.");
+      console.error("Error fetching data:", err);
+      setError("Failed to fetch wallet groups and token information.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Fetch the active token details
-  const fetchActiveToken = async () => {
-    try {
-      const tokenData = await getActiveToken(user.chatId);
-      setActiveToken(tokenData);
-    } catch (err) {
-      console.error("Error fetching active token:", err);
-      setResult("Error fetching active token.");
-    }
-  };
-
-  // For each wallet, fetch its token balance from the blockchain
-  const fetchWalletBalances = async () => {
-    const balances = {};
+  const updateWalletBalances = async (group, token) => {
     try {
       const tokenContract = new ethers.Contract(
-        activeToken.address,
+        token.address,
         ERC20_ABI,
         provider
       );
-      // Use activeToken.decimals if available, or fetch from the contract
-      const decimals =
-        activeToken.decimals || Number(await tokenContract.decimals());
-      // Loop through each wallet in the group and fetch its balance
-      for (const wallet of walletGroup.wallets) {
-        const balBN = await tokenContract.balanceOf(wallet.address);
-        const bal = ethers.formatUnits(balBN, decimals);
-        balances[wallet.address] = bal;
-      }
-      setWalletBalances(balances);
+
+      const walletsWithBalances = await Promise.all(
+        group.wallets.map(async (wallet) => {
+          const balance = await tokenContract.balanceOf(wallet.address);
+          return {
+            ...wallet,
+            tokenBalance: ethers.formatEther(balance),
+          };
+        })
+      );
+
+      const totalBalance = walletsWithBalances.reduce(
+        (sum, wallet) => sum + parseFloat(wallet.tokenBalance),
+        0
+      );
+
+      const groupWithBalances = {
+        ...group,
+        wallets: walletsWithBalances,
+        totalTokenBalance: totalBalance.toFixed(6),
+      };
+
+      setWalletGroups([groupWithBalances]); // Set as array with single group
     } catch (err) {
-      console.error("Error fetching wallet balances:", err);
+      console.error("Error updating balances:", err);
+      setError("Failed to fetch token balances.");
     }
   };
 
-  // Handle sell amount change for a specific wallet
-  const handleAmountChange = (address, value) => {
-    setSellAmounts((prev) => ({
-      ...prev,
-      [address]: value,
-    }));
-  };
-
-  // Handle setting the input to the maximum balance for a wallet
-  const handleMax = (address) => {
-    if (walletBalances[address]) {
-      setSellAmounts((prev) => ({
-        ...prev,
-        [address]: walletBalances[address],
-      }));
-    }
-  };
-
-  // Handle setting the input to 50% of the wallet balance
-  const handleHalf = (address) => {
-    if (walletBalances[address]) {
-      const half = (parseFloat(walletBalances[address]) / 2).toString();
-      setSellAmounts((prev) => ({
-        ...prev,
-        [address]: half,
-      }));
-    }
-  };
-
-  // Handle time range change
   const handleTimeRangeChange = (e) => {
     const { name, value } = e.target;
     setTimeRange((prev) => ({
@@ -208,90 +162,53 @@ function SellPage() {
     }));
   };
 
-  // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!walletGroup) {
-      setResult("No active wallet group found.");
-      return;
-    }
-
-    // Validate sell amounts: each must be a positive number
-    // const amounts = Object.values(sellAmounts);
-    // if (amounts.some((amt) => !amt.trim() || isNaN(amt))) {
-    //   setResult("Please enter valid sell amounts for all wallets.");
-    //   return;
-    // }
-
-    // Validate time range
-    const { minDelayMinutes, maxDelayMinutes } = timeRange;
-    if (
-      isNaN(minDelayMinutes) ||
-      isNaN(maxDelayMinutes) ||
-      minDelayMinutes <= 0 ||
-      maxDelayMinutes <= 0 ||
-      minDelayMinutes > maxDelayMinutes
-    ) {
-      setResult("Please enter a valid time range (min ≤ max, both > 0).");
-      return;
-    }
-
-    setIsLoading(true);
-    setResult("");
-    setTransactions([]); // Reset previous transactions
-
+  const handleSellAll = async (groupId) => {
     try {
-      // Prepare payload: an array of { walletAddress, amount }
-      const sellDetails = walletGroup.wallets.map((wallet) => ({
-        walletAddress: wallet.address,
-        amount: sellAmounts[wallet.address],
-      }));
+      setLoading(true);
+      setError("");
 
-      // Initiate the sell process using authenticated user data.
-      await startSell(
-        user.chatId,
-        sellDetails,
-        {
-          minDelayMinutes,
-          maxDelayMinutes,
+      const response = await fetch(`${SOCKET_SERVER_URL}/api/sell-all`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        token
-      );
+        body: JSON.stringify({
+          chatId: user.chatId,
+          groupId,
+          timeRange,
+        }),
+      });
 
-      // No need to set result here; updates will arrive via Socket.IO
-    } catch (err) {
-      if (
-        err.code != "ERR_NETWORK" ||
-        err.message != "Network Error" ||
-        err.name != "AxiosError"
-      ) {
-        console.error("Error starting sell:", err);
-        setResult(
-          err.response?.data?.error ||
-            "An error occurred while starting the sell process."
-        );
-        setIsLoading(false);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to start sell process");
       }
+
+      // Clear previous transactions for this group
+      setTransactions([]);
+    } catch (err) {
+      console.error("Error selling tokens:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // If user is not logged in, prompt to log in
   if (!user) {
     return (
       <Container maxWidth="sm" sx={{ mt: 8 }}>
         <Paper elevation={6} sx={{ p: 4, textAlign: "center" }}>
           <Typography variant="h5" gutterBottom>
-            Sell Tokens
+            Sell All Tokens
           </Typography>
           <Typography variant="body1" gutterBottom>
-            Please log in to execute sell operations.
+            Please log in to access the sell page.
           </Typography>
           <Button
             variant="contained"
             color="primary"
-            onClick={() => navigate("/login")}
-            startIcon={<SellIcon />}>
+            onClick={() => navigate("/login")}>
             Go to Login
           </Button>
         </Paper>
@@ -300,175 +217,160 @@ function SellPage() {
   }
 
   return (
-    <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      {user?.chatId && (
-        <TransactionStateManager
-          chatId={user.chatId}
-          onResume={handleTransactionResume}
-        />
-      )}
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Paper elevation={6} sx={{ p: 4 }}>
         <Typography variant="h4" gutterBottom>
-          Start Sell Process
+          Sell All Tokens
         </Typography>
 
-        {result && (
-          <Alert
-            severity={
-              result.startsWith("Sell process completed") ? "success" : "info"
-            }
-            sx={{ mb: 2, whiteSpace: "pre-wrap" }}>
-            {result}
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
           </Alert>
         )}
 
-        {walletGroup ? (
-          <Box component="form" onSubmit={handleSubmit} noValidate>
-            <Typography variant="h6" gutterBottom>
-              Sell Amounts per Wallet:
-            </Typography>
-            <Grid container spacing={2}>
-              {walletGroup.wallets.map((wallet) => (
-                <Grid item xs={12} sm={6} key={wallet.address}>
-                  <TextField
-                    label={`${wallet.address.toString().slice(0, 6)}... (${
-                      walletBalances[wallet.address]
-                        ? Number(walletBalances[wallet.address]).toFixed(5)
-                        : "loading..."
-                    } ${activeToken?.symbol || ""})`}
-                    type="number"
-                    inputProps={{ step: "0.0001", min: "0" }}
-                    value={sellAmounts[wallet.address]}
-                    onChange={(e) =>
-                      handleAmountChange(wallet.address, e.target.value)
-                    }
-                    placeholder={
-                      sellAmounts[wallet.address] ? "" : "Enter amount"
-                    }
-                    fullWidth
-                    disabled={isLoading}
-                    InputLabelProps={{
-                      shrink: !!sellAmounts[wallet.address], // This ensures the label does not overlap with the input text
-                    }}
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <Button
-                            size="small"
-                            onClick={() => handleMax(wallet.address)}>
-                            Max
-                          </Button>
-                          <Button
-                            size="small"
-                            onClick={() => handleHalf(wallet.address)}>
-                            50%
-                          </Button>
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-
-            <Typography variant="h6" gutterBottom sx={{ mt: 4 }}>
-              Transaction Time Range (between sells):
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Min (minutes)"
-                  name="minDelayMinutes"
-                  type="number"
-                  inputProps={{ min: "1" }}
-                  value={timeRange.minDelayMinutes}
-                  onChange={handleTimeRangeChange}
-                  required
-                  fullWidth
-                  disabled={isLoading}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Max (minutes)"
-                  name="maxDelayMinutes"
-                  type="number"
-                  inputProps={{ min: "1" }}
-                  value={timeRange.maxDelayMinutes}
-                  onChange={handleTimeRangeChange}
-                  required
-                  fullWidth
-                  disabled={isLoading}
-                />
-              </Grid>
-            </Grid>
-
-            <Box sx={{ mt: 4 }}>
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                fullWidth
-                disabled={isLoading}
-                startIcon={isLoading && <CircularProgress size={20} />}>
-                {isLoading ? "Starting Sell Process..." : "Start Sell"}
-              </Button>
-            </Box>
-          </Box>
-        ) : (
-          <Box
-            display="flex"
-            justifyContent="center"
-            alignItems="center"
-            minHeight="200px">
-            <CircularProgress />
-          </Box>
+        {activeToken && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Active Token: {activeToken.name} ({activeToken.symbol})
+          </Alert>
         )}
 
-        <Button
-          variant="outlined"
-          color="secondary"
-          fullWidth
-          onClick={() => navigate("/")}
-          sx={{ mt: 4 }}>
-          Back to Home
-        </Button>
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            Time Range Settings:
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Min Delay (minutes)"
+                name="minDelayMinutes"
+                type="number"
+                value={timeRange.minDelayMinutes}
+                onChange={handleTimeRangeChange}
+                fullWidth
+                disabled={loading}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Max Delay (minutes)"
+                name="maxDelayMinutes"
+                type="number"
+                value={timeRange.maxDelayMinutes}
+                onChange={handleTimeRangeChange}
+                fullWidth
+                disabled={loading}
+              />
+            </Grid>
+          </Grid>
+        </Box>
+
+        <Grid container spacing={3}>
+          {walletGroups.map((group) => (
+            <Grid item xs={12} key={group._id}>
+              <Card>
+                <CardContent>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      mb: 2,
+                    }}>
+                    <Typography variant="h6">{group.name}</Typography>
+                    <Typography variant="h6" color="primary">
+                      Total Balance: {group.totalTokenBalance}{" "}
+                      {activeToken?.symbol}
+                    </Typography>
+                  </Box>
+                  <List>
+                    {group.wallets.map((wallet, index) => (
+                      <ListItem
+                        key={wallet.address}
+                        divider={index < group.wallets.length - 1}>
+                        <ListItemText
+                          primary={`Wallet: ${wallet.address.slice(
+                            0,
+                            6
+                          )}...${wallet.address.slice(-4)}`}
+                          secondary={`Balance: ${wallet.tokenBalance} ${activeToken?.symbol}`}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </CardContent>
+                <CardActions>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    onClick={() => handleSellAll(group._id)}
+                    disabled={
+                      loading || parseFloat(group.totalTokenBalance) === 0
+                    }>
+                    {loading ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      "Sell All Tokens"
+                    )}
+                  </Button>
+                </CardActions>
+                <Link to="/">
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    onClick={() => handleSellAll(group._id)}>
+                    Go to Home
+                  </Button>
+                </Link>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
 
         {transactions.length > 0 && (
           <Box mt={4}>
             <Typography variant="h6" gutterBottom>
-              Transaction Updates
+              Recent Transactions
             </Typography>
             <List>
               {transactions.map((tx, index) => (
                 <ListItem key={index} divider>
                   <ListItemText
-                    primary={`- Wallet: ${tx.wallet.slice(
+                    primary={`Wallet: ${tx.wallet?.slice(
                       0,
-                      7
-                    )}...${tx.wallet.slice(35)}`}
+                      6
+                    )}...${tx.wallet?.slice(-4)}`}
                     secondary={
-                      tx.status === "success"
-                        ? `✅ Success: Sold tokens. Tx Hash: ${tx.txHash.slice(
-                            0,
-                            10
-                          )}...`
-                        : tx.status === "failed"
-                        ? `❌ Failed to sell tokens.`
-                        : tx.status === "error"
-                        ? `❗ Error: Transaction reverted.`
-                        : `⚠️ ${tx.status.replace("_", " ").toUpperCase()}`
+                      <>
+                        <Typography component="span" variant="body2">
+                          Status: {tx.status.toUpperCase()}
+                        </Typography>
+                        {tx.error && (
+                          <Typography
+                            component="span"
+                            variant="body2"
+                            color="error">
+                            <br />
+                            Error: {tx.error}
+                          </Typography>
+                        )}
+                        <br />
+                        <Typography
+                          component="span"
+                          variant="caption"
+                          color="textSecondary">
+                          {new Date(tx.timestamp).toLocaleString()}
+                        </Typography>
+                      </>
                     }
                   />
-                  {tx.status === "success" && (
-                    <Chip label="Success" color="success" />
-                  )}
-                  {tx.status === "failed" && (
-                    <Chip label="Failed" color="error" />
-                  )}
-                  {tx.status === "error" && (
-                    <Chip label="Error" color="error" />
-                  )}
+                  <Chip
+                    label={tx.status.toUpperCase()}
+                    color={tx.status === "success" ? "success" : "error"}
+                    sx={{ ml: 2 }}
+                  />
                 </ListItem>
               ))}
             </List>

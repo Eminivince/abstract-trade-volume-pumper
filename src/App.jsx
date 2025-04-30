@@ -16,6 +16,7 @@ import CollectFundsPage from "./pages/CollectFundsPage";
 import BurnPage from "./pages/BurnPage";
 import BuyPage from "./pages/BuyPage";
 import SellPage from "./pages/SellPage";
+import TradePage from "./pages/TradePage";
 import UsageReportPage from "./pages/UsageReportPage";
 import HelpPage from "./pages/HelpPage";
 import LoginPage from "./pages/LoginPage";
@@ -207,6 +208,19 @@ const AnimatedRoutes = () => {
               variants={pageVariants}
               transition={pageTransition}>
               <SellPage />
+            </motion.div>
+          }
+        />
+        <Route
+          path="/trade"
+          element={
+            <motion.div
+              initial="initial"
+              animate="in"
+              exit="out"
+              variants={pageVariants}
+              transition={pageTransition}>
+              <TradePage />
             </motion.div>
           }
         />

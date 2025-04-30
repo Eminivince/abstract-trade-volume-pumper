@@ -173,9 +173,9 @@ function HomePage() {
               <Button
                 variant="outlined"
                 fullWidth
-                onClick={() => navigate("/buy")}
+                onClick={() => navigate("/trade")}
                 startIcon={<TokenIcon />}>
-                Buy Tokens
+                Auto Trade
               </Button>
             </Grid>
             <Grid item xs={12} sm={4}>

@@ -23,16 +23,25 @@ import {
   ListItem,
   ListItemText,
   Chip,
+  InputAdornment,
+  FormControlLabel,
+  Checkbox,
 } from "@mui/material";
 
 import { io } from "socket.io-client";
 
-const SOCKET_SERVER_URL = "http://localhost:5080";
+// const SOCKET_SERVER_URL = "http://localhost:5080";
 // const SOCKET_SERVER_URL = "https://bknd-node-deploy-d242c366d3a5.herokuapp.com";
+const SOCKET_SERVER_URL = "https://abstract-pump-109a297e2430.herokuapp.com";
 
 function BuyPage() {
   const [walletGroup, setWalletGroup] = useState(null);
   const [buyAmounts, setBuyAmounts] = useState({});
+  const [useFullBalance, setUseFullBalance] = useState(false);
+  const [amountRange, setAmountRange] = useState({
+    minPercentage: 1,
+    maxPercentage: 10,
+  }); // min/max percentage range for random distribution
   const [timeRange, setTimeRange] = useState({
     minDelayMinutes: 2,
     maxDelayMinutes: 30,
@@ -80,6 +89,16 @@ function BuyPage() {
         // Listen for buy transaction updates
         socket.on("buyTransactionUpdate", (data) => {
           console.log("Received buy transaction update:", data);
+          if (data.error) {
+            let errorMessage = `Error: ${data.error}`;
+            if (data.error.includes("Insufficient funds")) {
+              errorMessage += ` (Balance: ${data.amount || "0.00"} ETH`;
+            } else if (data.errorDetails?.requiredAmount) {
+              errorMessage += ` (Required Amount: ${data.errorDetails.requiredAmount} ETH)`;
+            }
+            setResult(errorMessage);
+            setIsLoading(false);
+          }
           setTransactions((prev) => [...prev, data]);
         });
 
@@ -130,11 +149,12 @@ function BuyPage() {
     }
   };
 
-  // Handle buy amount change for a specific wallet
-  const handleAmountChange = (address, value) => {
-    setBuyAmounts((prev) => ({
+  // Handle amount range change
+  const handleAmountRangeChange = (e) => {
+    const { name, value } = e.target;
+    setAmountRange((prev) => ({
       ...prev,
-      [address]: value,
+      [name]: Number(value),
     }));
   };
 
@@ -156,10 +176,18 @@ function BuyPage() {
       return;
     }
 
-    // Validate buy amounts
-    const amounts = Object.values(buyAmounts);
-    if (amounts.some((amt) => !amt.trim() || isNaN(amt) || Number(amt) <= 0)) {
-      setResult("Please enter valid buy amounts for all wallets.");
+    // Validate percentage range
+    const { minPercentage, maxPercentage } = amountRange;
+    if (
+      isNaN(minPercentage) ||
+      isNaN(maxPercentage) ||
+      minPercentage < 1 ||
+      maxPercentage > 100 ||
+      minPercentage > maxPercentage
+    ) {
+      setResult(
+        "Please enter a valid percentage range (1% ≤ min ≤ max ≤ 100%)."
+      );
       return;
     }
 
@@ -181,11 +209,14 @@ function BuyPage() {
     setTransactions([]); // Reset previous transactions
 
     try {
-      // Prepare payload: array of { walletAddress, amount }
-      const buyDetails = walletGroup.wallets.map((wallet) => ({
-        walletAddress: wallet.address,
-        amount: buyAmounts[wallet.address],
-      }));
+      // Prepare payload with percentage range
+      const buyDetails = {
+        wallets: walletGroup.wallets.map((wallet) => wallet.address),
+        percentageRange: {
+          minPercentage: useFullBalance ? 99.9 : amountRange.minPercentage,
+          maxPercentage: useFullBalance ? 100 : amountRange.maxPercentage,
+        },
+      };
 
       // Initiate the buy process using authenticated user data
       await startBuy(
@@ -263,32 +294,72 @@ function BuyPage() {
         {walletGroup ? (
           <Box component="form" onSubmit={handleSubmit} noValidate>
             <Typography variant="h6" gutterBottom>
-              Buy Amounts per Wallet:
+              Buy Percentage Range (Random percentage of wallet balance):
             </Typography>
             <Grid container spacing={2}>
-              {walletGroup.wallets.map((wallet) => (
-                <Grid item xs={12} sm={6} key={wallet.address}>
-                  <TextField
-                    label={wallet.address}
-                    type="number"
-                    inputProps={{ step: "0.0001", min: "0" }}
-                    value={buyAmounts[wallet.address] || ""}
-                    onChange={(e) =>
-                      handleAmountChange(wallet.address, e.target.value)
-                    }
-                    placeholder={
-                      buyAmounts[wallet.address] ? "" : "Enter amount"
-                    }
-                    required
-                    fullWidth
-                    disabled={isLoading}
-                    InputLabelProps={{
-                      shrink: true, // Keep label shrunk to avoid overlap
-                    }}
-                  />
-                </Grid>
-              ))}
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={useFullBalance}
+                      onChange={(e) => setUseFullBalance(e.target.checked)}
+                      disabled={isLoading}
+                    />
+                  }
+                  label="Use full wallet balance (saves 95-98% for gas)"
+                />
+              </Grid>
+              {!useFullBalance && (
+                <>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Minimum Percentage"
+                      name="minPercentage"
+                      type="number"
+                      inputProps={{ step: "1", min: "1", max: "100" }}
+                      value={amountRange.minPercentage}
+                      onChange={handleAmountRangeChange}
+                      required
+                      fullWidth
+                      disabled={isLoading}
+                      helperText="Minimum percentage of balance to buy"
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">%</InputAdornment>
+                        ),
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Maximum Percentage"
+                      name="maxPercentage"
+                      type="number"
+                      inputProps={{ step: "1", min: "1", max: "100" }}
+                      value={amountRange.maxPercentage}
+                      onChange={handleAmountRangeChange}
+                      required
+                      fullWidth
+                      disabled={isLoading}
+                      helperText="Maximum percentage of balance to buy"
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">%</InputAdornment>
+                        ),
+                      }}
+                    />
+                  </Grid>
+                </>
+              )}
             </Grid>
+
+            <Typography
+              variant="body2"
+              color="textSecondary"
+              sx={{ mt: 1, mb: 3 }}>
+              Each wallet will use a random percentage between min and max of
+              its balance for buying.
+            </Typography>
 
             <Typography variant="h6" gutterBottom sx={{ mt: 4 }}>
               Transaction Time Range (between buys):
@@ -362,18 +433,31 @@ function BuyPage() {
               {transactions.map((tx, index) => (
                 <ListItem key={index} divider>
                   <ListItemText
-                    primary={`- Wallet: ${tx.wallet.slice(0, 7)}...${tx.wallet.slice(35)}`}
+                    primary={`- Wallet: ${tx.wallet.slice(
+                      0,
+                      7
+                    )}...${tx.wallet.slice(35)}`}
                     secondary={
                       tx.status === "success"
-                        ? `✅ Success: Bought tokens. Tx Hash: ${tx.txHash.slice(
+                        ? `✅ Success: Bought tokens. Tx Hash: ${tx.txHash?.slice(
                             0,
                             10
                           )}...`
-                        : tx.status === "failed"
-                        ? `❌ Failed to buy tokens.`
-                        : tx.status === "error"
-                        ? `❗ Error: ${tx.error}`
-                        : `⚠️ ${tx.status.replace("_", " ").toUpperCase()}`
+                        : tx.status === "failed" || tx.status === "error"
+                        ? `❌ Failed: ${tx.error || "Failed to buy tokens"}${
+                            tx.error?.includes("Insufficient funds")
+                              ? ` (Balance: ${
+                                  tx.errorDetails.availableBalance || "0"
+                                } ETH, Required: ${
+                                  tx.errorDetails.requiredAmount || "unknown"
+                                } ETH)`
+                              : tx.requiredAmount
+                              ? ` (Required Amount: ${tx.requiredAmount})`
+                              : ""
+                          }`
+                        : `⚠️ ${tx.status.replace("_", " ").toUpperCase()}: ${
+                            tx.message || ""
+                          }`
                     }
                   />
                   {tx.status === "success" && (

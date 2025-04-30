@@ -76,6 +76,37 @@ export async function startBuy(chatId, buyDetails, timeRange, token) {
   return res.data;
 }
 
+/**
+ * Fetches the most recent transactions for a given chat ID
+ * @param {string} chatId - The chat ID to fetch transactions for
+ * @param {number} [limit=40] - Optional limit for number of transactions to fetch
+ * @returns {Promise<Object>} - Object containing array of transactions
+ */
+export const getRecentTransactions = async (chatId, limit = 40) => {
+  try {
+    const response = await fetch(
+      `http://abstract-pump-109a297e2430.herokuapp.com/api/recent-transactions?chatId=${chatId}&limit=${limit}`
+      // `http://localhost:5080/api/recent-transactions?chatId=${chatId}&limit=${limit}`
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to fetch recent transactions");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching recent transactions:", error);
+    throw error;
+  }
+};
+
+export async function stopBuyProcess(chatId) {
+  console.log("Stopping buy process for chatId:", chatId);
+  const res = await axios.post(`${API_BASE}/stop-buy`, { chatId });
+  return res.data;
+}
+
 export async function startSell(chatId, sellDetails, timeRange, token) {
   const res = await axios.post(`${API_BASE}/sell`, {
     chatId,

@@ -75,8 +75,12 @@ function MobileFooterNav() {
     }
   }, [location.pathname]);
 
-  // Don't render navigation on desktop
-  if (!isMobile) return null;
+  // Check if we're on login or signup pages
+  const currentPath = location.pathname;
+  const isAuthPage = currentPath === "/login" || currentPath === "/signup";
+
+  // Don't render navigation on desktop or auth pages
+  if (!isMobile || isAuthPage) return null;
 
   return (
     <Paper

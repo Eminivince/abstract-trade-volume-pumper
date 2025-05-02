@@ -1,9 +1,8 @@
 // frontend/src/api/usageReport.js
 import axios from "axios";
+import { config } from "../config";
 
-
-const API_BASE = "https://abstract-pump-109a297e2430.herokuapp.com/api";
-// const API_BASE = "http://localhost:5080/api";
+const API_BASE = config.API_URL;
 
 export async function generateUsageReport(chatId, fromDate, toDate, userID) {
   // This returns a PDF. We can get it as a Blob to let the user download or view.

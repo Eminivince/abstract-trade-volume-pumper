@@ -1,9 +1,8 @@
 // frontend/src/api/tokens.js
 import axios from "axios";
+import { config } from "../config";
 
-
-const API_BASE = "https://abstract-pump-109a297e2430.herokuapp.com/api";
-// const API_BASE = "http://localhost:5080/api";
+const API_BASE = config.API_URL;
 
 export async function getTokens(chatId) {
   const res = await axios.get(`${API_BASE}/tokens?chatId=${chatId}`);

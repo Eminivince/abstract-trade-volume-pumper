@@ -1,5 +1,4 @@
 // frontend/src/App.js
-import React from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -22,6 +21,7 @@ import HelpPage from "./pages/HelpPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import ViewWalletGroupPage from "./pages/ViewWalletGroupPage";
+import MobileFooterNav from "./components/MobileFooterNav";
 import "./App.css";
 
 // Animation variants
@@ -259,6 +259,7 @@ function App() {
   return (
     <Router>
       <AnimatedRoutes />
+      <MobileFooterNav />
     </Router>
   );
 }

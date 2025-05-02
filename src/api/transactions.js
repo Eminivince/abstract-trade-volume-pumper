@@ -1,10 +1,8 @@
 // frontend/src/api/transactions.js
 import axios from "axios";
+import { config, IS_PRODUCTION } from "../config";
 
-// const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:5080/api";
-
-// const API_BASE = "http://localhost:5080/api";
-const API_BASE = "https://abstract-pump-109a297e2430.herokuapp.com/api";
+const API_BASE = config.API_URL;
 
 /**
  * Get the current transaction state for a user
@@ -12,8 +10,18 @@ const API_BASE = "https://abstract-pump-109a297e2430.herokuapp.com/api";
  * @returns {Promise<Object>} - The transaction state object
  */
 export async function getTransactionState(chatId) {
+  if (!IS_PRODUCTION) {
+    console.log(`[DEV] Getting transaction state for chatId: ${chatId}`);
+  }
+
   const res = await axios.get(`${API_BASE}/transaction-state?chatId=${chatId}`);
-  console.log(res);
+
+  if (!IS_PRODUCTION) {
+    console.log(`[DEV] Transaction state response:`, res.data);
+  } else {
+    console.log(`Transaction state retrieved for ${chatId}`);
+  }
+
   return res.data;
 }
 
@@ -59,21 +67,31 @@ export async function burnETH(chatId, burnAmount) {
  * @param {Object} timeRange - { minDelayMinutes, maxDelayMinutes }
  * @returns {Promise<Object>} - The response containing successCount and failCount.
  */
-// export async function startBuy(chatId, buyDetails, timeRange) {
-//   const res = await axios.post(`${API_BASE}/buy`, {
-//     chatId,
-//     buyDetails, // Array of { walletAddress, amount }
-//     timeRange, // { minDelayMinutes, maxDelayMinutes }
-//   });
-//   return res.data; // e.g., { message, successCount, failCount }
-// }
+export async function startBuy(chatId, buyDetails, timeRange) {
+  // Enhanced logging in development mode
+  if (!IS_PRODUCTION) {
+    console.log(`[DEV] Starting buy process for chatId: ${chatId}`);
+    console.log(`[DEV] Buy details:`, JSON.stringify(buyDetails, null, 2));
+    console.log(
+      `[DEV] Time range: ${timeRange.minDelayMinutes}-${timeRange.maxDelayMinutes} minutes`
+    );
+  }
 
-export async function startBuy(chatId, buyDetails, timeRange, token) {
   const res = await axios.post(`${API_BASE}/buy`, {
     chatId,
     buyDetails,
     timeRange,
   });
+
+  // Environment-specific logging
+  if (!IS_PRODUCTION) {
+    console.log(`[DEV] Buy process response:`, res.data);
+  } else {
+    console.log(
+      `Buy process initiated for ${chatId}: ${res.data.successCount} wallets`
+    );
+  }
+
   return res.data;
 }
 
@@ -86,8 +104,7 @@ export async function startBuy(chatId, buyDetails, timeRange, token) {
 export const getRecentTransactions = async (chatId, limit = 40) => {
   try {
     const response = await fetch(
-      `https://abstract-pump-109a297e2430.herokuapp.com/api/recent-transactions?chatId=${chatId}&limit=${limit}`
-      // `http://localhost:5080/api/recent-transactions?chatId=${chatId}&limit=${limit}`
+      `${API_BASE}/recent-transactions?chatId=${chatId}&limit=${limit}`
     );
 
     if (!response.ok) {
@@ -108,7 +125,7 @@ export async function stopBuyProcess(chatId) {
   return res.data;
 }
 
-export async function startSell(chatId, sellDetails, timeRange, token) {
+export async function startSell(chatId, sellDetails, timeRange) {
   const res = await axios.post(`${API_BASE}/sell`, {
     chatId,
     sellDetails,

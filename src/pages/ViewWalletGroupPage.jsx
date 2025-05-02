@@ -1,11 +1,13 @@
 // frontend/src/pages/ViewWalletGroupPage.js
-import React, { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ethers } from "ethers";
+import { motion, AnimatePresence } from "framer-motion";
 
 import { viewWalletGroup, viewWalletGroupById } from "../api/walletGroups";
 import { getActiveToken } from "../api/tokens";
 import { useAuth } from "../context/AuthContext";
+import { IS_PRODUCTION, config } from "../config";
 
 // Import MUI Components
 import {
@@ -15,135 +17,257 @@ import {
   Button,
   Alert,
   List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   Box,
   IconButton,
   Tooltip,
   Snackbar,
-  Modal,
-  CircularProgress,
+  Chip,
+  Skeleton,
+  AlertTitle,
+  ListItemIcon,
 } from "@mui/material";
 import GroupIcon from "@mui/icons-material/Group";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { all } from "axios";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import TokenIcon from "@mui/icons-material/Token";
+import ErrorIcon from "@mui/icons-material/Error";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import tokenABI from "../assets/TokenABI";
 import ExportPrivateKeys from "../components/ExportPrivateKeys";
 
+// Animation variants
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { duration: 0.5 },
+  },
+};
+
+const listItemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.3 },
+  },
+};
+
+const staggerVariants = {
+  visible: {
+    transition: {
+      staggerChildren: 0.1,
+    },
+  },
+};
+
 function ViewWalletGroupPage() {
-  const { user } = useAuth(); // your logged-in user, containing chatId
-  const { groupId } = useParams(); // e.g. /wallet-group/view/:groupId
+  const { user } = useAuth();
+  const { groupId } = useParams();
   const navigate = useNavigate();
 
   const [groupData, setGroupData] = useState(null);
-  const [allWallets, setAllWallets] = useState(null);
-  const [balanceArray, setBalanceArray] = useState([]);
-  const [allNativeBalance, setNativeBalanceArray] = useState([]);
+  const [walletBalances, setWalletBalances] = useState([]);
+  const [isLoadingGroup, setIsLoadingGroup] = useState(true);
   const [activeToken, setActiveToken] = useState(null);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState([]);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
+    severity: "info",
   });
-  const [isLoadingBalances, setIsLoadingBalances] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [balancesLoaded, setBalancesLoaded] = useState(false);
+  const balancesLoadingRef = useRef(false);
 
-  // const provider = new ethers.JsonRpcProvider("https://network.ambrosus.io");
-  const provider = new ethers.JsonRpcProvider("https://api.mainnet.abs.xyz");
+  // Initialize wallet balances with loading state objects
+  const initializeWalletBalances = useCallback((wallets) => {
+    if (!wallets) return [];
+    return wallets.map((wallet) => ({
+      address: wallet.address,
+      loading: true,
+      tokenBalance: null,
+      ethBalance: null,
+      error: null,
+    }));
+  }, []);
 
+  // Use provider based on environment
+  const provider = new ethers.JsonRpcProvider(
+    IS_PRODUCTION
+      ? "https://api.mainnet.abs.xyz"
+      : "https://api.mainnet.abs.xyz" // You can use a testnet URL here if needed for development
+  );
+
+  // Add debug info in non-production modes
+  useEffect(() => {
+    if (!IS_PRODUCTION) {
+      console.log(`[DEV] Using API: ${config.API_URL}`);
+      console.log(`[DEV] Using Socket: ${config.SOCKET_URL}`);
+    }
+  }, []);
+
+  // Function to add an error to the errors array
+  const addError = (message, source = "general") => {
+    console.error(
+      `[${IS_PRODUCTION ? "PROD" : "DEV"}] Error (${source}):`,
+      message
+    );
+    setErrors((prev) => [...prev, { id: Date.now(), message, source }]);
+  };
+
+  // Function to remove an error from the errors array
+  const removeError = (errorId) => {
+    setErrors((prev) => prev.filter((error) => error.id !== errorId));
+  };
+
+  // Fetch wallet group data
   useEffect(() => {
     if (!user) {
-      // If no one is logged in, redirect to login
       navigate("/login");
       return;
     }
 
     const fetchData = async () => {
+      setIsLoadingGroup(true);
+      setErrors([]);
+
       try {
         let data;
         if (groupId) {
-          // We have a groupId param, so fetch that specific group
           data = await viewWalletGroupById(user.chatId, groupId);
         } else {
-          // No groupId param, so fetch the active group
           data = await viewWalletGroup(user.chatId);
         }
+
         setGroupData(data);
+        setWalletBalances(initializeWalletBalances(data.wallets));
       } catch (err) {
         console.error("Error viewing wallet group:", err);
-        setError(err.response?.data?.error || err.message);
+        addError(err.response?.data?.error || err.message);
+      } finally {
+        setIsLoadingGroup(false);
       }
     };
 
     fetchData();
-  }, [user, groupId, navigate]);
+  }, [user, groupId, navigate, initializeWalletBalances, refreshTrigger]);
 
+  // Fetch wallet balances individually
   useEffect(() => {
-    let wallets;
-    try {
-      if (groupData) {
-        wallets = groupData.wallets.map((w) => w.address);
-      }
-      setAllWallets(wallets);
-    } catch (err) {
-      return err;
-    }
-  }, [groupData]);
+    if (
+      !groupData?.wallets ||
+      !user ||
+      balancesLoaded ||
+      balancesLoadingRef.current
+    )
+      return;
 
-  useEffect(() => {
-    const fetchActiveToken = async () => {
-      setIsLoadingBalances(true);
+    const fetchBalances = async () => {
+      // Set loading ref to prevent concurrent fetches
+      balancesLoadingRef.current = true;
+
       try {
-        let data = await getActiveToken(user.chatId);
+        // Get active token info
+        const tokenData = await getActiveToken(user.chatId);
+        setActiveToken(tokenData);
 
-        let activeTokenAddress = data.address;
-        let activeTokenName = data.name;
+        // Log environment info for debugging
+        if (!IS_PRODUCTION) {
+          console.log(
+            `[DEV] Fetching balances for ${groupData.wallets.length} wallets`
+          );
+          console.log(
+            `[DEV] Using token: ${tokenData.symbol} (${tokenData.address})`
+          );
+        }
 
-        setActiveToken(activeTokenName);
-
+        // Create token contract instance
         const tokenContract = new ethers.Contract(
-          activeTokenAddress,
+          tokenData.address,
           tokenABI,
           provider
         );
 
-        let allBalance = [];
-        let allNativeBalance = [];
+        let completedWallets = 0;
+        const totalWallets = groupData.wallets.length;
 
-        if (allWallets) { 
-          for (let i = 0; i <= allWallets.length; i++) {
-            try {
-              const tx = await tokenContract.balanceOf(
-                allWallets[i.toString()]
-              );
-              let bal = ethers.formatEther(Number(tx).toString());
-              allBalance.push(bal);
+        // Process each wallet individually
+        groupData.wallets.forEach(async (wallet, index) => {
+          if (!IS_PRODUCTION) {
+            console.log(
+              `[DEV] Fetching balance for wallet ${
+                index + 1
+              }/${totalWallets}: ${wallet.address}`
+            );
+          }
 
-              const nativeBalance = await provider.getBalance(allWallets[i]);
-              let nativeBal = ethers.formatEther(nativeBalance);
-              allNativeBalance.push(nativeBal);
+          try {
+            // Get token balance
+            const tokenBalance = await tokenContract.balanceOf(wallet.address);
+            const formattedTokenBalance = ethers.formatUnits(
+              tokenBalance,
+              tokenData.decimals
+            );
 
-              if (allBalance.length == 20) {
-                setBalanceArray(allBalance);
-                setNativeBalanceArray(allNativeBalance);
-                setIsLoadingBalances(false);
-                break;
-              }
-            } catch (err) {
-              console.log(err);
+            // Get ETH balance
+            const ethBalance = await provider.getBalance(wallet.address);
+            const formattedEthBalance = ethers.formatEther(ethBalance);
+
+            // Update this specific wallet's balances
+            setWalletBalances((prevBalances) => {
+              const newBalances = [...prevBalances];
+              newBalances[index] = {
+                ...newBalances[index],
+                loading: false,
+                tokenBalance: formattedTokenBalance,
+                ethBalance: formattedEthBalance,
+                error: null,
+              };
+              return newBalances;
+            });
+
+            // Track completion
+            completedWallets++;
+            if (completedWallets === totalWallets) {
+              setBalancesLoaded(true);
+              balancesLoadingRef.current = false;
+            }
+          } catch (err) {
+            console.error(
+              `Error fetching balances for wallet ${wallet.address}:`,
+              err
+            );
+
+            // Update this specific wallet with error
+            setWalletBalances((prevBalances) => {
+              const newBalances = [...prevBalances];
+              newBalances[index] = {
+                ...newBalances[index],
+                loading: false,
+                error: `Failed to load balances: ${err.message}`,
+              };
+              return newBalances;
+            });
+
+            // Track completion even for errors
+            completedWallets++;
+            if (completedWallets === totalWallets) {
+              setBalancesLoaded(true);
+              balancesLoadingRef.current = false;
             }
           }
-        }
+        });
       } catch (err) {
         console.error("Error fetching active token:", err);
-        setError(err.response?.data?.error || err.message);
-        setIsLoadingBalances(false);
+        addError(`Failed to fetch token information: ${err.message}`, "token");
+        balancesLoadingRef.current = false;
       }
     };
 
-    fetchActiveToken();
-  }, [allWallets, balanceArray]);
+    fetchBalances();
+  }, [groupData, user, provider, balancesLoaded]);
 
   const handleCopy = (text, label) => {
     navigator.clipboard
@@ -152,6 +276,7 @@ function ViewWalletGroupPage() {
         setSnackbar({
           open: true,
           message: `${label} copied to clipboard!`,
+          severity: "success",
         });
       })
       .catch((err) => {
@@ -159,154 +284,367 @@ function ViewWalletGroupPage() {
         setSnackbar({
           open: true,
           message: `Failed to copy ${label}.`,
+          severity: "error",
         });
       });
   };
 
   const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
+    setSnackbar((prev) => ({ ...prev, open: false }));
   };
 
-  if (!user) {
-    return null; // or some fallback
-  }
+  const handleRefresh = () => {
+    setBalancesLoaded(false);
+    setRefreshTrigger((prev) => prev + 1);
+    setSnackbar({
+      open: true,
+      message: `Refreshing wallet data... [${IS_PRODUCTION ? "PROD" : "DEV"}]`,
+      severity: "info",
+    });
 
-  if (error) {
-    return (
-      <Container maxWidth="sm" sx={{ mt: 8 }}>
-        <Paper elevation={6} sx={{ p: 4, textAlign: "center" }}>
-          <Typography variant="h5" gutterBottom color="error">
-            Error: {error}
-          </Typography>
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={() => navigate("/")}
-            startIcon={<ArrowBackIcon />}>
-            Back to Home
-          </Button>
-        </Paper>
-      </Container>
-    );
-  }
+    if (!IS_PRODUCTION) {
+      console.log("[DEV] Manual refresh triggered");
+    }
+  };
+
+  if (!user) return null;
 
   return (
-    <Container maxWidth="md" sx={{ mt: 8, mb: 8 }}>
-      <Paper elevation={6} sx={{ p: 4 }}>
-        <Box display="flex" alignItems="center" mb={2}>
-          <GroupIcon color="primary" sx={{ fontSize: 40, mr: 1 }} />
-          <Typography variant="h5" component="h2">
-            View Wallet Group
+    <Container maxWidth="md" sx={{ mt: 4, mb: 8 }}>
+      <motion.div
+        initial="hidden"
+        animate="visible"
+        variants={containerVariants}>
+        <Paper
+          elevation={3}
+          sx={{
+            p: 4,
+            borderRadius: 2,
+            background: "linear-gradient(to bottom right, #1e1e3f, #121212)",
+            position: "relative",
+            overflow: "hidden",
+          }}>
+          {/* Header */}
+          <Box
+            display="flex"
+            alignItems="center"
+            justifyContent="space-between"
+            mb={3}
+            component={motion.div}
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5 }}>
+            <Box display="flex" alignItems="center">
+              <GroupIcon color="primary" sx={{ fontSize: 40, mr: 2 }} />
+              <Typography
+                variant="h4"
+                component="h1"
+                sx={{ fontWeight: "bold" }}>
+                {isLoadingGroup ? (
+                  <Skeleton width={150} />
+                ) : (
+                  groupData?.name || "Wallet Group"
+                )}
+              </Typography>
+              {/* {!IS_PRODUCTION && (
+                <Chip
+                  label="DEV MODE"
+                  color="warning"
+                  size="small"
+                  sx={{ ml: 2 }}
+                />
+              )} */}
+            </Box>
+
+            <Box>
+              <Tooltip title="Refresh Data">
+                <IconButton
+                  color="primary"
+                  onClick={handleRefresh}
+                  sx={{ mr: 1 }}>
+                  <RefreshIcon />
+                </IconButton>
+              </Tooltip>
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={() => navigate("/")}
+                startIcon={<ArrowBackIcon />}>
+                Back
+              </Button>
+            </Box>
+          </Box>
+
+          {/* Error alerts */}
+          <AnimatePresence>
+            {errors.length > 0 && (
+              <Box mb={3}>
+                {errors.map((error) => (
+                  <motion.div
+                    key={error.id}
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.3 }}
+                    style={{ marginBottom: 8 }}>
+                    <Alert
+                      severity="error"
+                      onClose={() => removeError(error.id)}
+                      sx={{ mb: 1 }}>
+                      <AlertTitle>Error</AlertTitle>
+                      {error.message}
+                    </Alert>
+                  </motion.div>
+                ))}
+              </Box>
+            )}
+          </AnimatePresence>
+
+          {/* Token info */}
+          {activeToken && (
+            <Box
+              mb={3}
+              p={2}
+              sx={{
+                bgcolor: "rgba(255,255,255,0.05)",
+                borderRadius: 2,
+                border: "1px solid rgba(255,255,255,0.1)",
+              }}
+              component={motion.div}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.5 }}>
+              <Typography variant="h6" gutterBottom>
+                <TokenIcon sx={{ mr: 1, verticalAlign: "middle" }} />
+                Active Token
+              </Typography>
+              <Box display="flex" flexWrap="wrap" gap={2}>
+                <Chip
+                  label={`Name: ${activeToken.name}`}
+                  color="primary"
+                  variant="outlined"
+                />
+                <Chip
+                  label={`Symbol: ${activeToken.symbol}`}
+                  color="primary"
+                  variant="outlined"
+                />
+                <Chip
+                  label={`Address: ${activeToken.address.slice(
+                    0,
+                    6
+                  )}...${activeToken.address.slice(-4)}`}
+                  color="primary"
+                  variant="outlined"
+                  onClick={() =>
+                    handleCopy(activeToken.address, "Token Address")
+                  }
+                  icon={<ContentCopyIcon fontSize="small" />}
+                />
+              </Box>
+            </Box>
+          )}
+
+          {/* Wallets list */}
+          <Typography
+            variant="h5"
+            component="h2"
+            gutterBottom
+            sx={{
+              mt: 4,
+              mb: 2,
+              borderBottom: "1px solid rgba(255,255,255,0.1)",
+              pb: 1,
+            }}>
+            <AccountBalanceWalletIcon sx={{ mr: 1, verticalAlign: "middle" }} />
+            Wallets {walletBalances.length > 0 && `(${walletBalances.length})`}
           </Typography>
-        </Box>
 
-        {groupData ? (
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              <strong>Name:</strong> {groupData.name}
-            </Typography>
-
-            <Typography variant="h6" gutterBottom>
-              Wallets:
-            </Typography>
-            <List>
-              {groupData.wallets?.map((w, index) => (
-                <ListItem
-                  key={index}
-                  sx={{ flexDirection: "column", alignItems: "flex-start" }}>
-                  <Box display="flex" alignItems="center" width="100%">
-                    <ListItemIcon>
-                      <GroupIcon color={w.privateKey ? "action" : "disabled"} />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={
-                        <Box display="flex" alignItems="center">
-                          <Typography
-                            variant="body1"
-                            sx={{ wordBreak: "break-all" }}>
-                            <strong>Address:</strong> {w.address}
-                          </Typography>
-                          <Tooltip title="Copy Address">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleCopy(w.address, "Address")}>
-                              <ContentCopyIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      }
-                    />
-                  </Box>
-                  <Typography variant="body2" sx={{ mt: 1 }}>
-                    <strong>Token Bal:</strong>{" "}
-                    {balanceArray.length > 0
-                      ? Number(balanceArray[index]).toFixed(7)
-                      : "Loading..."}{" "}
-                    - {activeToken}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mt: 1 }}>
-                    <strong>ETH Bal:</strong>{" "}
-                    {allNativeBalance.length > 0
-                      ? Number(allNativeBalance[index]).toFixed(7)
-                      : "Loading..."}{" "}
-                    - {"ETH"}
-                  </Typography>
-                </ListItem>
+          {isLoadingGroup ? (
+            // Loading skeletons
+            <Box
+              component={motion.div}
+              variants={staggerVariants}
+              initial="hidden"
+              animate="visible">
+              {[1, 2, 3].map((_, index) => (
+                <motion.div key={index} variants={listItemVariants}>
+                  <Paper
+                    sx={{ p: 2, mb: 2, bgcolor: "rgba(255,255,255,0.03)" }}>
+                    <Box display="flex" alignItems="center" mb={1}>
+                      <Skeleton
+                        variant="circular"
+                        width={24}
+                        height={24}
+                        sx={{ mr: 2 }}
+                      />
+                      <Skeleton variant="text" width="80%" height={24} />
+                    </Box>
+                    <Box pl={5}>
+                      <Skeleton variant="text" width="40%" height={20} />
+                      <Skeleton variant="text" width="40%" height={20} />
+                    </Box>
+                  </Paper>
+                </motion.div>
               ))}
-            </List>
+            </Box>
+          ) : (
+            <List
+              sx={{ p: 0 }}
+              component={motion.ul}
+              variants={staggerVariants}
+              initial="hidden"
+              animate="visible">
+              <AnimatePresence>
+                {walletBalances.map((wallet, index) => (
+                  <motion.div
+                    key={wallet.address}
+                    variants={listItemVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ delay: index * 0.05 }}>
+                    <Paper
+                      elevation={1}
+                      sx={{
+                        mb: 2,
+                        p: 2,
+                        borderRadius: 2,
+                        bgcolor: wallet.error
+                          ? "rgba(255,87,34,0.05)"
+                          : "rgba(255,255,255,0.03)",
+                        border: wallet.error
+                          ? "1px solid rgba(255,87,34,0.2)"
+                          : "1px solid rgba(255,255,255,0.05)",
+                        transition: "all 0.3s ease",
+                        "&:hover": {
+                          bgcolor: "rgba(255,255,255,0.07)",
+                          transform: "translateY(-2px)",
+                          boxShadow: 3,
+                        },
+                      }}>
+                      <Box
+                        display="flex"
+                        alignItems="center"
+                        width="100%"
+                        mb={1}>
+                        <ListItemIcon sx={{ minWidth: 40 }}>
+                          {wallet.error ? (
+                            <ErrorIcon color="error" />
+                          ) : (
+                            <AccountBalanceWalletIcon color="primary" />
+                          )}
+                        </ListItemIcon>
 
-            {/* Add Export Private Keys button */}
-            <Box mt={3} display="flex" justifyContent="center">
+                        <Typography
+                          variant="subtitle1"
+                          sx={{
+                            fontFamily: "monospace",
+                            fontWeight: "medium",
+                            wordBreak: "break-all",
+                          }}>
+                          {wallet.address}
+                        </Typography>
+
+                        <Tooltip title="Copy Address">
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              handleCopy(wallet.address, "Address")
+                            }
+                            sx={{ ml: 1 }}>
+                            <ContentCopyIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+
+                      {wallet.error ? (
+                        <Alert severity="error" sx={{ mt: 1 }}>
+                          {wallet.error}
+                        </Alert>
+                      ) : (
+                        <Box
+                          sx={{
+                            pl: 5,
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 2,
+                          }}>
+                          <Chip
+                            icon={<TokenIcon fontSize="small" />}
+                            label={
+                              wallet.loading ? (
+                                <Skeleton width={100} />
+                              ) : (
+                                `${activeToken?.symbol || "Token"}: ${Number(
+                                  wallet.tokenBalance
+                                ).toFixed(6)}`
+                              )
+                            }
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                          />
+
+                          <Chip
+                            icon={<AccountBalanceWalletIcon fontSize="small" />}
+                            label={
+                              wallet.loading ? (
+                                <Skeleton width={100} />
+                              ) : (
+                                `ETH: ${Number(wallet.ethBalance).toFixed(6)}`
+                              )
+                            }
+                            size="small"
+                            color="secondary"
+                            variant="outlined"
+                          />
+
+                          {wallet.loading && (
+                            <Chip
+                              icon={<RefreshIcon fontSize="small" />}
+                              label="Loading balances..."
+                              size="small"
+                              color="default"
+                            />
+                          )}
+                        </Box>
+                      )}
+                    </Paper>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </List>
+          )}
+
+          {/* Export Private Keys */}
+          {groupData && groupData.wallets && (
+            <Box
+              mt={4}
+              display="flex"
+              justifyContent="center"
+              component={motion.div}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.3 }}>
               <ExportPrivateKeys
                 wallets={groupData.wallets}
                 groupName={groupData.name}
               />
             </Box>
-          </Box>
-        ) : (
-          <Typography variant="body1">Loading wallet group data...</Typography>
-        )}
-
-        <Box display="flex" justifyContent="center" mt={4}>
-          <Button
-            variant="outlined"
-            color="secondary"
-            onClick={() => navigate("/")}
-            startIcon={<ArrowBackIcon />}>
-            Back to Home
-          </Button>
-        </Box>
-
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={3000}
-          onClose={handleCloseSnackbar}
-          message={snackbar.message}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        />
-      </Paper>
-      <Modal
-        open={isLoadingBalances}
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}>
-        <Paper
-          elevation={24}
-          sx={{
-            p: 4,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 2,
-            bgcolor: "background.paper",
-            borderRadius: 2,
-          }}>
-          <CircularProgress />
-          <Typography>Loading wallet balances...</Typography>
+          )}
         </Paper>
-      </Modal>
+      </motion.div>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+        <Alert severity={snackbar.severity} onClose={handleCloseSnackbar}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }

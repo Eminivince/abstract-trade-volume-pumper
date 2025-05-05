@@ -403,6 +403,8 @@ const TransactionStateManager = ({
         return "Beta Group: Buying | Alpha Group: Selling";
       case "alpha_buy_beta_sell":
         return "Alpha Group: Buying | Beta Group: Selling";
+      case "beta_sell":
+        return "Beta Group: Selling";
       case "cooldown":
         return "Cooldown Period";
       case "distribute":
@@ -422,6 +424,8 @@ const TransactionStateManager = ({
       case "beta_buy_alpha_sell":
       case "alpha_buy_beta_sell":
         return "primary";
+      case "beta_sell":
+        return "secondary";
       case "cooldown":
         return "warning";
       case "stopped":
@@ -442,6 +446,8 @@ const TransactionStateManager = ({
       case "beta_buy_alpha_sell":
       case "alpha_buy_beta_sell":
         return <ShoppingCartIcon fontSize="small" />;
+      case "beta_sell":
+        return <SellIcon fontSize="small" />;
       case "cooldown":
         return <AccessTimeIcon fontSize="small" />;
       case "stopped":
@@ -636,11 +642,47 @@ const TransactionStateManager = ({
                         color="text.secondary"
                         gutterBottom
                         sx={{ display: "flex", alignItems: "center", mt: 1 }}>
-                        <span style={{ width: "90px" }}>Cycle:</span>
+                        <InfoIcon
+                          fontSize="small"
+                          sx={{ mr: 1, opacity: 0.7 }}
+                        />
+                        Trading Cycle: {transactionState.details.cycleCount}
+                      </Typography>
+                    )}
+
+                    {Object.prototype.hasOwnProperty.call(
+                      transactionState?.details || {},
+                      "startWithSell"
+                    ) && (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+                        {transactionState.details.startWithSell ? (
+                          <SellIcon
+                            fontSize="small"
+                            sx={{ mr: 1, opacity: 0.7 }}
+                          />
+                        ) : (
+                          <ShoppingCartIcon
+                            fontSize="small"
+                            sx={{ mr: 1, opacity: 0.7 }}
+                          />
+                        )}
+                        Started with:{" "}
                         <Chip
-                          label={`#${transactionState.details.cycleCount}`}
                           size="small"
-                          variant="outlined"
+                          label={
+                            transactionState.details.startWithSell
+                              ? "SELL"
+                              : "BUY"
+                          }
+                          color={
+                            transactionState.details.startWithSell
+                              ? "secondary"
+                              : "primary"
+                          }
+                          sx={{ ml: 1, height: 20, fontSize: "0.7rem" }}
                         />
                       </Typography>
                     )}
@@ -668,6 +710,22 @@ const TransactionStateManager = ({
                         </Typography>
                       </Box>
                     )}
+
+                    <Box sx={{ mt: 2 }}>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+                        <AccessTimeIcon
+                          fontSize="small"
+                          sx={{ mr: 1, opacity: 0.7 }}
+                        />
+                        Cooldown:{" "}
+                        {transactionState?.details?.cooldownMinutes
+                          ? `${transactionState.details.cooldownMinutes} minutes`
+                          : "N/A"}
+                      </Typography>
+                    </Box>
 
                     <Box
                       sx={{

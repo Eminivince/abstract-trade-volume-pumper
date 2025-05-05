@@ -337,7 +337,7 @@ function TradePage() {
   };
 
   // Handle form submission to start trading
-  const handleStartTrading = async (e) => {
+  const handleStartTrading = async (e, startWithSell = false) => {
     e.preventDefault();
 
     if (!alphaWalletGroup || !betaWalletGroup) {
@@ -401,6 +401,7 @@ function TradePage() {
           },
           timeRange,
           cooldownPeriodMinutes: cooldownPeriod,
+          startWithSell,
         });
       }
 
@@ -424,13 +425,20 @@ function TradePage() {
             maxDelayMinutes: timeRange.maxDelayMinutes,
           },
           cooldownPeriodMinutes: cooldownPeriod,
+          startWithSell,
         }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setResult(`Trading started: ${data.message}`);
+        setResult(
+          `Trading started: ${data.message} ${
+            startWithSell
+              ? "(Starting with Sell phase)"
+              : "(Starting with Buy phase)"
+          }`
+        );
         setIsTrading(true);
         setError(null);
       } else {
@@ -657,8 +665,8 @@ function TradePage() {
 
           {/* Trading configuration form */}
           <Box
-            component={motion.form}
-            onSubmit={handleStartTrading}
+            component="form"
+            onSubmit={(e) => e.preventDefault()}
             variants={itemVariants}
             noValidate
             sx={{ mb: 4 }}>
@@ -917,27 +925,47 @@ function TradePage() {
                 gap: 2,
               }}>
               {!isTrading ? (
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="primary"
-                  fullWidth
-                  disabled={isLoading}
-                  startIcon={
-                    isLoading ? (
-                      <CircularProgress size={20} />
-                    ) : (
-                      <SwapHorizIcon />
-                    )
-                  }
-                  sx={{
-                    py: 1.5,
-                    borderRadius: 2,
-                    background: "linear-gradient(45deg, #3f51b5, #2196f3)",
-                    position: "relative",
-                  }}>
-                  {isLoading ? "Starting Trading..." : "Start Trading"}
-                </Button>
+                <>
+                  <Button
+                    onClick={(e) => handleStartTrading(e, false)}
+                    variant="contained"
+                    color="primary"
+                    disabled={isLoading}
+                    startIcon={
+                      isLoading ? (
+                        <CircularProgress size={20} />
+                      ) : (
+                        <ShoppingCartIcon />
+                      )
+                    }
+                    sx={{
+                      py: 1.5,
+                      borderRadius: 2,
+                      background: "linear-gradient(45deg, #3f51b5, #2196f3)",
+                      position: "relative",
+                      flex: 1,
+                    }}>
+                    {isLoading ? "Starting..." : "Start with Buy"}
+                  </Button>
+
+                  <Button
+                    onClick={(e) => handleStartTrading(e, true)}
+                    variant="contained"
+                    color="secondary"
+                    disabled={isLoading}
+                    startIcon={
+                      isLoading ? <CircularProgress size={20} /> : <SellIcon />
+                    }
+                    sx={{
+                      py: 1.5,
+                      borderRadius: 2,
+                      background: "linear-gradient(45deg, #9c27b0, #e91e63)",
+                      position: "relative",
+                      flex: 1,
+                    }}>
+                    {isLoading ? "Starting..." : "Start with Sell"}
+                  </Button>
+                </>
               ) : (
                 <Button
                   variant="contained"

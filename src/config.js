@@ -14,7 +14,7 @@
 const useLocalApi = import.meta.env.VITE_USE_LOCAL_API === "true";
 
 // You can also manually toggle this flag
-export const IS_PRODUCTION = useLocalApi;
+export const IS_PRODUCTION = !useLocalApi;
 
 // API and Socket URLs
 const PRODUCTION = {

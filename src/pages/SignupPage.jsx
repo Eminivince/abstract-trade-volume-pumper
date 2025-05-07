@@ -104,10 +104,7 @@ function SignupPage() {
   };
 
   const handleSubmit = async (e) => {
-    if (chatId.trim() === "iamGorf_bot2575") {
-      setStatus({ type: "error", message: "Preferred ID is wrong." });
-      return;
-    }
+    
     e.preventDefault();
 
     // Final validation
